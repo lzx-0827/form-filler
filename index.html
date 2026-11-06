@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>表计安装点填表器</title>
+<link rel="stylesheet" href="assets/app.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="logo">表</span>
+    <div class="brand-text">
+      <h1>表计安装点填表器</h1>
+    </div>
+  </div>
+  <div class="top-actions">
+    <button class="ghost" id="btnReset" type="button">重新开始</button>
+  </div>
+</header>
+
+<nav class="stepper" aria-label="步骤">
+  <button class="step-item" id="stepTemplate" data-target="#card-template" type="button"><i>1</i><span>模板</span></button>
+  <span class="step-sep"></span>
+  <button class="step-item" id="stepRooms" data-target="#card-rooms" type="button"><i>2</i><span>房间</span></button>
+  <span class="step-sep" id="sepMapping"></span>
+  <button class="step-item" id="stepMapping" data-target="#card-mapping" type="button"><i>3</i><span>对应</span></button>
+  <span class="step-sep"></span>
+  <button class="step-item" id="stepPreview" data-target="#card-preview" type="button"><i>4</i><span>预览导出</span></button>
+</nav>
+
+<main class="shell">
+
+  <section class="card" id="card-template">
+    <div class="card-head">
+      <h2>空模板</h2>
+      <span class="spacer"></span>
+      <span class="pill" id="templatePill" hidden></span><button class="ghost btn-sm" id="btnReplaceTemplate" type="button" hidden>更换</button>
+    </div>
+
+    <label class="drop" id="dropTemplate" for="fileTemplate">
+      <input type="file" id="fileTemplate" accept=".xlsx,.xls" hidden>
+      <span class="drop-icon">＋</span>
+      <span class="drop-title">选择导入模板</span>
+      <span class="drop-sub">支持 .xlsx / .xls</span>
+    </label>
+
+    <div class="meta-line" id="templateMeta" hidden></div>
+    <div class="option-line" id="templateOptions" hidden></div>
+  </section>
+
+  <section class="card" id="card-rooms">
+    <div class="card-head">
+      <h2>房间清单</h2>
+      <span class="spacer"></span>
+      <span class="pill" id="roomPill" hidden></span><button class="ghost btn-sm" id="btnReplaceRooms" type="button" hidden>更换</button>
+    </div>
+
+    <label class="drop" id="dropRooms" for="fileRooms">
+      <input type="file" id="fileRooms" accept=".xlsx" hidden>
+      <span class="drop-icon">＋</span>
+      <span class="drop-title">选择房间编号</span>
+      <span class="drop-sub">支持 .xlsx</span>
+    </label>
+
+    <div class="meta-line" id="roomMeta" hidden></div>
+
+    <div class="field-block">
+      <label class="label" for="prefixInput">项目地址前缀 <span class="req">必填</span></label>
+      <input type="text" id="prefixInput" class="text-line" placeholder="例如：海口市秀英区石山镇广东海南先进制造业合作产业园保障性租赁住房">
+      <p class="hint">地址 = 前缀 + 楼宇名称 + 单元号 + 门牌</p>
+    </div>
+  </section>
+
+  <section class="card" id="card-mapping" hidden>
+    <div class="card-head">
+      <h2>楼栋对应</h2>
+      <span class="pill" id="mappingPill"></span>
+      <span class="spacer"></span>
+      <button class="ghost" id="btnAutoMap" type="button">按栋号重新匹配</button>
+    </div>
+
+    <div class="table-scroll">
+      <table class="map-table">
+        <thead>
+          <tr><th>房间编号</th><th>房间数</th><th></th><th>楼宇名称</th><th>状态</th></tr>
+        </thead>
+        <tbody id="mappingBody"></tbody>
+      </table>
+      <p class="empty" id="mappingEmpty">先上传模板和房间清单。</p>
+    </div>
+    <div class="warn-box" id="mappingWarn" hidden></div>
+  </section>
+
+  <section class="card" id="card-preview">
+    <div class="card-head">
+      <h2>预览</h2>
+      <span class="spacer"></span>
+      <div class="toolbar">
+        <select id="filterBuilding" class="select-sm"><option value="">全部楼栋</option></select>
+        <select id="filterFloor" class="select-sm"><option value="">全部楼层</option></select>
+        <div class="search-wrap">
+          <input type="search" id="searchInput" placeholder="搜索地址或门牌" class="search">
+          <button class="search-clear" id="btnClearSearch" type="button" hidden title="清空">×</button>
+        </div>
+        <button class="ghost btn-sm" id="btnResetFilters" type="button">重置</button>
+      </div>
+    </div>
+
+    <div class="stat-row" id="statRow"></div>
+
+    <div class="bulk-row">
+      <span class="hint">后缀</span>
+      <label class="field-inline"><span>单元后缀</span><select id="bulkUnitSuffix" class="select-sm"><option value="">空</option></select></label>
+      <label class="field-inline"><span>楼层后缀</span><select id="bulkFloorSuffix" class="select-sm"><option value="">空</option></select></label>
+      <label class="field-inline"><span>房号后缀</span><select id="bulkRoomSuffix" class="select-sm"><option value="">空</option></select></label>
+      <button class="secondary btn-sm" id="btnBulkSuffix" type="button">应用到当前筛选</button>
+    </div>
+
+    <div class="bulk-row">
+      <span class="hint">安装点位置</span>
+      <select id="bulkSite" class="select-sm">
+        <option>厨房表</option>
+      </select>
+      <button class="secondary btn-sm" id="btnBulk" type="button">应用到当前筛选</button>
+    </div>
+
+    <div class="table-scroll table-tall" id="previewScroll">
+      <table class="preview-table">
+        <thead>
+          <tr>
+            <th class="c-idx">#</th>
+            <th class="c-addr">房屋地址</th>
+            <th>楼宇名称</th>
+            <th class="c-unit">单元号</th>
+            <th class="c-unit-suffix">单元后缀</th>
+            <th class="c-floor">楼层号</th>
+            <th class="c-floor-suffix">楼层后缀</th>
+            <th class="c-room">房号</th>
+            <th class="c-room-suffix">房号后缀</th>
+            <th class="c-site">安装点位置</th>
+          </tr>
+        </thead>
+        <tbody id="previewBody"></tbody>
+      </table>
+      <div class="empty-state" id="previewEmpty">
+        <p>暂无数据</p>
+      </div>
+    </div>
+
+    <div class="pager" id="pager" hidden></div>
+
+    <div class="action-bar">
+      <span class="action-info" id="exportHint">未就绪</span>
+      <button class="primary" id="btnExport" type="button" disabled>导出 .xlsx</button>
+    </div>
+  </section>
+
+</main>
+
+<div class="toast" id="toast" hidden></div>
+
+<script src="vendor/exceljs.min.js"></script>
+<script src="vendor/xlsx.full.min.js"></script>
+<script src="src/core.js"></script>
+<script src="src/app.js"></script>
+</body>
+</html>
+
+
+

@@ -1,0 +1,13 @@
+﻿{
+  "name": "meter-install-form-filler",
+  "version": "1.0.0",
+  "private": true,
+  "description": "房间清单生成房产表计安装点导入表（Windows 桌面客户端）",
+  "scripts": {
+    "fixtures": "node scripts/make_template.mjs && node scripts/make_single_rooms.mjs"
+  },
+  "dependencies": {
+    "exceljs": "^4.4.0",
+    "xlsx": "^0.18.5"
+  }
+}
