@@ -685,65 +685,141 @@
   }
 
   // 猜一个初始列映射，供结构确认界面预填
+  function looksLikeBuilding(v) {
+    return v.length <= 10 && /(幢|栋|#|号楼|区|苑|园)/.test(v);
+  }
+
+  function looksLikeUnit(v) {
+    return /^[A-Za-z]{1,2}$/.test(v) || /单元$/.test(v);
+  }
+
+  function looksLikeFloor(v) {
+    var m = v.match(/^(\d{1,2})\s*[Ff层楼]?$/);
+    return !!m && parseInt(m[1], 10) <= 60;
+  }
+
+  function looksLikeRoom(v) {
+    return /^\d{2,6}$/.test(v) || /^\d+\s*[-－]\s*\d+$/.test(v) || /^\d+[室号]$/.test(v);
+  }
+
+  function sampleColumn(matrix, startRow, col, limit) {
+    var out = [];
+    for (var r = startRow; r < matrix.length && out.length < limit; r++) {
+      var row = matrix[r] || [];
+      var v = row[col - 1];
+      if (v == null) continue;
+      v = String(v).trim();
+      if (v) out.push(v);
+    }
+    return out;
+  }
+
+  function ratio(values, test) {
+    if (!values.length) return 0;
+    var hit = 0;
+    values.forEach(function (v) { if (test(v)) hit++; });
+    return hit / values.length;
+  }
+
   function guessRoomConfig(matrix) {
     var maxCols = matrix.reduce(function (n, row) { return Math.max(n, row.length); }, 0);
+
+    // 1) 表头行：优先按名称找，找不到就用第一行有内容的
+    var headerRow = 0;
+    var names = {};
     for (var r = 0; r < Math.min(matrix.length, 10); r++) {
       var texts = (matrix[r] || []).map(function (v) { return String(v == null ? '' : v).trim(); });
-      var idx = { building: 0, unit: 0, floor: 0, room: 0, roomNo: 0 };
-      var doors = [];
       texts.forEach(function (text, i) {
-        if (/^(楼栋|楼宇)/.test(text)) idx.building = idx.building || i + 1;
-        else if (/^单元/.test(text)) idx.unit = idx.unit || i + 1;
-        else if (/楼层/.test(text)) idx.floor = idx.floor || i + 1;
-        else if (/^房号/.test(text)) idx.roomNo = idx.roomNo || i + 1;
-        else if (/^(房间编号|房间号|门牌)/.test(text)) {
-          idx.room = idx.room || i + 1;
-          doors.push(i + 1);
-        }
+        if (/^(楼栋|楼宇)/.test(text)) names.building = names.building || i + 1;
+        else if (/^单元/.test(text)) names.unit = names.unit || i + 1;
+        else if (/楼层/.test(text)) names.floor = names.floor || i + 1;
+        else if (/^房号/.test(text)) names.roomNo = names.roomNo || i + 1;
+        else if (/^(房间编号|房间号|门牌)/.test(text)) names.room = names.room || i + 1;
       });
-
-      var hasAny = idx.building || idx.unit || idx.floor || idx.room || idx.roomNo;
-      if (!hasAny) continue;
-
-      // 横向门牌：有「楼层」，且门牌表头重复出现（合并单元格），
-      // 或者门牌列后面还有没表头的数据列。
-      var grid = false;
-      var doorStart = 0;
-      if (idx.floor && !idx.roomNo) {
-        if (doors.length >= 2) {
-          grid = true;
-          doorStart = doors[0];
-        } else if (doors.length === 1) {
-          var lastHeader = texts.reduce(function (last, t, i) { return t ? i + 1 : last; }, 0);
-          if (doors[0] < lastHeader || doors[0] < maxCols) {
-            grid = true;
-            doorStart = doors[0];
-          }
-        } else {
-          grid = true;
-          doorStart = idx.floor + 1;
-        }
+      var hasName = names.building || names.unit || names.floor || names.room || names.roomNo;
+      if (hasName) { headerRow = r + 1; break; }
+    }
+    if (!headerRow) {
+      for (var r2 = 0; r2 < Math.min(matrix.length, 10); r2++) {
+        var filled = (matrix[r2] || []).filter(function (v) { return String(v == null ? '' : v).trim() !== ''; }).length;
+        if (filled >= 2) { headerRow = r2 + 1; break; }
       }
+    }
+    if (!headerRow) headerRow = 1;
 
-      return {
-        layout: grid ? 'grid' : 'row',
-        headerRow: r + 1,
-        buildingCol: idx.building || 0,
-        unitCol: idx.unit || 0,
-        roomCol: idx.room || (idx.floor || idx.roomNo ? 0 : 2),
-        floorCol: idx.floor || 0,
-        doorStartCol: grid ? doorStart : 0
+    // 2) 看数据本身：每列像什么
+    var profiles = [];
+    for (var c = 1; c <= maxCols; c++) {
+      var values = sampleColumn(matrix, headerRow, c, 50);
+      profiles[c] = {
+        values: values,
+        building: ratio(values, looksLikeBuilding),
+        unit: ratio(values, looksLikeUnit),
+        floor: ratio(values, looksLikeFloor),
+        room: ratio(values, looksLikeRoom),
+        distinct: values.filter(function (v, i) { return values.indexOf(v) === i; }).length
       };
     }
 
+    function pick(field, min) {
+      var best = 0;
+      var score = 0;
+      for (var col = 1; col <= maxCols; col++) {
+        var p = profiles[col];
+        if (!p || p.values.length < 2) continue;
+        if (p[field] > score) { score = p[field]; best = col; }
+      }
+      return score >= min ? best : 0;
+    }
+
+    var buildingCol = pick('building', 0.6);
+    var unitCol = pick('unit', 0.6);
+    if (unitCol === buildingCol) unitCol = 0;
+    var roomCol = pick('room', 0.6);
+    if (roomCol === buildingCol || roomCol === unitCol) roomCol = 0;
+    var floorCol = pick('floor', 0.6);
+    if (floorCol === buildingCol || floorCol === unitCol || floorCol === roomCol) floorCol = 0;
+
+    // 名称兜底
+    if (!buildingCol) buildingCol = names.building || 0;
+    if (!unitCol) unitCol = names.unit || 0;
+    if (!roomCol && !floorCol) roomCol = names.room || 0;
+    if (!floorCol) floorCol = names.floor || 0;
+
+    // 3) 判断一行一间还是横向门牌
+    var grid = false;
+    var doorStart = 0;
+    if (floorCol) {
+      var doors = [];
+      for (var d = floorCol + 1; d <= maxCols; d++) {
+        if (profiles[d] && profiles[d].values.length >= 2 && profiles[d].room >= 0.5) doors.push(d);
+      }
+      if (doors.length >= 2) {
+        grid = true;
+        doorStart = doors[0];
+      } else if (doors.length === 1) {
+        var shortDoor = profiles[doors[0]].values.filter(function (v) {
+          return v.replace(/\D/g, '').length <= 2;
+        }).length >= profiles[doors[0]].values.length / 2;
+        if (shortDoor) { grid = true; doorStart = doors[0]; }
+        else { roomCol = doors[0]; }
+      } else {
+        grid = true;
+        doorStart = floorCol + 1;
+      }
+    }
+
+    if (!roomCol && !grid) roomCol = 2;
+    if (grid && !doorStart) doorStart = floorCol + 1;
+
     return {
-      layout: 'row',
-      headerRow: 1,
-      buildingCol: 0,
-      unitCol: 0,
-      roomCol: 2,
-      floorCol: 0,
-      doorStartCol: 0
+      layout: grid ? 'grid' : 'row',
+      headerRow: headerRow,
+      buildingCol: buildingCol,
+      unitCol: unitCol,
+      roomCol: grid ? 0 : roomCol,
+      floorCol: floorCol,
+      doorStartCol: doorStart
     };
   }
 
