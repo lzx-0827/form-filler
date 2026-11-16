@@ -663,9 +663,10 @@
     return window.pywebview.api.export_xls(xlsPayload(info)).then(handleDesktopResult);
   }
 
-  function saveViaDesktop(buffer, ext) {
+  function saveViaDesktop(buffer, ext, name) {
+    var filename = name ? name + '.' + ext : '房产表计安装点导入_' + stampText() + '.' + ext;
     return window.pywebview.api
-      .save_file(toBase64(buffer), '房产表计安装点导入_' + stampText() + '.' + ext)
+      .save_file(toBase64(buffer), filename)
       .then(handleDesktopResult);
   }
 
@@ -793,6 +794,20 @@
     bindDrop($('#dropRooms'), $('#fileRooms'), loadRooms);
     $('#btnReplaceTemplate').addEventListener('click', function () { $('#fileTemplate').click(); });
     $('#btnReplaceRooms').addEventListener('click', function () { $('#fileRooms').click(); });
+
+    $('#btnRoomTemplate').addEventListener('click', function () {
+      if (!hasDesktop()) { toast('请在桌面客户端中使用'); return; }
+      var wb = window.RoomTemplate.build(ExcelJS);
+      wb.xlsx.writeBuffer().then(function (buffer) {
+        return saveViaDesktop(buffer, 'xlsx', '房间编号模板');
+      }).then(function (result) {
+        toast('模板已保存：' + result.savedPath);
+      }).catch(function (err) {
+        if (err && err.canceled) return;
+        console.error(err);
+        toast('保存失败：' + err.message, true);
+      });
+    });
 
     $('#prefixInput').addEventListener('input', function () {
       renderPreview();

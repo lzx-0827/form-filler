@@ -46,6 +46,7 @@ def fill_template(template_bytes, sheet_name, header_row, rows, floor_col=None, 
 
         used = ws.UsedRange
         current_last = used.Row + used.Rows.Count - 1
+        no_data_rows = current_last <= header_row
 
         # 行数不足：在末尾插入，格式沿用上一行
         if current_last < target_last:
@@ -68,6 +69,15 @@ def fill_template(template_bytes, sheet_name, header_row, rows, floor_col=None, 
             write_rows.append(out_row)
 
         data_rng = ws.Range(ws.Cells(header_row + 1, 1), ws.Cells(target_last, last_col))
+
+        # 模板只有表头、没有数据行时，插入会沿用表头样式，这里恢复成普通正文
+        if no_data_rows:
+            data_rng.ClearFormats()
+            data_rng.Font.Name = "宋体"
+            data_rng.Font.Size = 10
+            data_rng.Font.Bold = False
+            data_rng.Font.ColorIndex = -4105  # xlAutomatic
+
         data_rng.Value = write_rows
 
         # 房号 01–09 保持文本，10 以上仍是数字
@@ -129,11 +139,15 @@ def resolve_validation(ws, formula):
         return []
     formula = formula.strip()
     if formula.startswith("="):
+        ref = formula[1:].strip()
         try:
-            rng = ws.Range(formula[1:])
-            return _flatten(rng.Value)
+            rng = ws.Range(ref)
         except Exception:
-            return []
+            try:
+                rng = ws.Parent.Names(ref).RefersToRange
+            except Exception:
+                return []
+        return _flatten(rng.Value)
     return [item.strip() for item in formula.split(",") if item.strip()]
 
 

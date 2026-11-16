@@ -586,12 +586,15 @@
     };
   }
 
-  // 解析《房间编号》：自动识别「楼栋/单元/楼层/门牌」；没有楼栋就是单楼栋小区
+  // 解析《房间编号》：兼容两种排版
+  // 1) 楼栋/单元/楼层 + 横向门牌；2) 楼栋 + 房间编号（每行一间）
   function parseRoomSheet(ws) {
     var lastRow = ws.rowCount || 0;
     var lastCol = ws.columnCount || 0;
     var headerRow = 0, bCol = 0, uCol = 0, fCol = 0, doorCol = 0;
+    var layout = 'grid';
 
+    // 排版一：带「楼层」表头
     for (var r = 1; r <= Math.min(8, lastRow); r++) {
       var texts = [];
       for (var c = 1; c <= lastCol; c++) texts.push(cellText(ws.getRow(r).getCell(c)).trim());
@@ -610,6 +613,29 @@
         break;
       }
     }
+
+    // 排版二：只有「楼栋 + 房间编号」，没有楼层列
+    if (!headerRow) {
+      for (var r2 = 1; r2 <= Math.min(10, lastRow); r2++) {
+        var texts2 = [];
+        for (var c2 = 1; c2 <= lastCol; c2++) texts2.push(cellText(ws.getRow(r2).getCell(c2)).trim());
+        var bi = -1, ri = -1, ui = -1;
+        for (var k = 0; k < texts2.length; k++) {
+          if (bi < 0 && /^(楼栋|楼宇)/.test(texts2[k])) bi = k;
+          if (ri < 0 && /^(房间编号|房间号|门牌|房号)/.test(texts2[k])) ri = k;
+          if (ui < 0 && /^单元/.test(texts2[k])) ui = k;
+        }
+        if (bi >= 0 && ri >= 0) {
+          headerRow = r2;
+          bCol = bi + 1;
+          doorCol = ri + 1;
+          uCol = ui >= 0 ? ui + 1 : 0;
+          layout = 'flat';
+          break;
+        }
+      }
+    }
+
     if (!headerRow) { headerRow = 1; bCol = 1; uCol = 2; fCol = 3; }
 
     var mode = bCol ? 'building' : 'single';
@@ -618,6 +644,14 @@
     var index = {};
     var curBuilding = mode === 'single' ? '-' : '';
     var curUnit = '';
+
+    function ensureBuilding(name) {
+      if (!index[name]) {
+        index[name] = { name: name, count: 0, units: [] };
+        buildings.push(index[name]);
+      }
+      return index[name];
+    }
 
     for (var row = headerRow + 1; row <= lastRow; row++) {
       var sheetRow = ws.getRow(row);
@@ -629,10 +663,23 @@
           var uText = cellText(sheetRow.getCell(uCol)).trim();
           if (uText) curUnit = (uText === '/' || uText === '-') ? '' : uText.replace(/单元\s*$/, '').trim();
         }
-        if (!index[curBuilding]) {
-          index[curBuilding] = { name: curBuilding, count: 0, units: [] };
-          buildings.push(index[curBuilding]);
+      }
+
+      if (layout === 'flat') {
+        if (uCol) {
+          var uText2 = cellText(sheetRow.getCell(uCol)).trim();
+          if (uText2) curUnit = (uText2 === '/' || uText2 === '-') ? '' : uText2.replace(/单元\s*$/, '').trim();
         }
+        var raw = cellText(sheetRow.getCell(doorCol)).trim();
+        if (!raw || raw === '/' || raw === '-') continue;
+        var prefixed = raw.match(/^(\d+)\s*[-－]\s*(\d+)$/);
+        if (prefixed) raw = prefixed[2];
+        var no = raw.replace(/\D/g, '');
+        if (!no) continue;
+        var flatFloor = no.length > 2 ? parseInt(no.slice(0, -2), 10) : null;
+        rooms.push({ building: curBuilding, unit: curUnit, floor: flatFloor, door: no, row: row });
+        if (mode === 'building') ensureBuilding(curBuilding).count++;
+        continue;
       }
 
       var floorText = cellText(sheetRow.getCell(fCol)).replace(/[^\d]/g, '');
@@ -649,7 +696,7 @@
         if (door === '/' || door === '-') return;
         rooms.push({ building: curBuilding, unit: curUnit, floor: floor, door: door, row: row });
         if (mode === 'building') {
-          index[curBuilding].count++;
+          ensureBuilding(curBuilding).count++;
           if (index[curBuilding].units.indexOf(curUnit) < 0) index[curBuilding].units.push(curUnit);
         }
       });
@@ -659,7 +706,7 @@
       buildings = [{ name: '-', count: rooms.length, units: [] }];
     }
 
-    return { mode: mode, headerRow: headerRow, rooms: rooms, buildings: buildings };
+    return { mode: mode, layout: layout, headerRow: headerRow, rooms: rooms, buildings: buildings };
   }
 
   // 门牌 101 + 楼层 1 → 房号 01；门牌 1301 + 楼层 13 → 房号 01

@@ -8,7 +8,7 @@ Windows 桌面客户端：独立窗口、原生另存为，不联网、不保存
 
 1. 双击 `表计安装点填表器.exe` 打开窗口。
 2. 上传空模板（`.xls` / `.xlsx`）。
-3. 上传房间编号（`.xlsx`）。
+3. 上传房间编号（`.xlsx`，支持「楼栋+房间编号」和「楼栋/单元/楼层+门牌」两种排版；没有文件可点「下载房间模板」）。
 4. 确认楼栋对应，填写项目地址前缀；预览每页 100 行，可翻页。
 5. 点「导出 .xls」，选择保存位置。
 6. 关闭窗口即退出。
@@ -39,6 +39,8 @@ index.html            页面
 assets/               样式、图标
 src/core.js           模板识别、房间解析、地址拼接
 src/app.js            界面逻辑
+src/room-template.js  生成《房间编号》录入模板
+templates/            房间编号模板.xlsx
 vendor/               WebView 内的 Excel 读写
 desktop.py            桌面入口（pywebview + WebView2）
 excel_export.py       Excel COM：写模板、读下拉选项
@@ -64,6 +66,7 @@ python scripts/test_desktop_api.py  # 桌面 API 测试
 - 需要 Windows 10/11、本机 Excel（导出 `.xls` 时调用）、WebView2 运行时（Win11 自带）。
 - 一次导出约 5–10 秒（1056 行）。
 - 只支持桌面客户端；直接用浏览器打开 `index.html` 会提示使用 exe。
+
 
 
 
