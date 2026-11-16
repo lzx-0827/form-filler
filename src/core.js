@@ -1,4 +1,4 @@
-﻿/*
+/*
  * 填表器 · 核心逻辑（与界面无关，可在浏览器和 Node 中运行）
  * 只做四件事：解析数据表、检测模板占位符、从文字里抽取字段、把值写回模板。
  */
@@ -587,9 +587,11 @@
   }
 
   // 按用户确认的列映射解析：一行一间
-  // cfg: {headerRow, buildingCol, unitCol, roomCol, mode:'room'|'split', floorCol, roomNoCol}
+  // cfg: {layout:'row'|'grid', headerRow, buildingCol, unitCol, roomCol, floorCol, doorStartCol}
   function parseRoomMatrix(matrix, cfg) {
+    var layout = cfg.layout || 'row';
     var headerRow = Math.max(1, cfg.headerRow || 1);
+    var maxCols = matrix.reduce(function (n, row) { return Math.max(n, row.length); }, 0);
     var rooms = [];
     var buildings = [];
     var index = {};
@@ -601,6 +603,18 @@
       if (!col) return '';
       var v = row[col - 1];
       return v == null ? '' : String(v).trim();
+    }
+
+    function pushRoom(rowIndex, door, floor) {
+      rooms.push({ building: curBuilding, unit: curUnit, floor: floor, door: door, row: rowIndex });
+      if (cfg.buildingCol) {
+        if (!index[curBuilding]) {
+          index[curBuilding] = { name: curBuilding, count: 0, units: [] };
+          buildings.push(index[curBuilding]);
+        }
+        index[curBuilding].count++;
+        if (index[curBuilding].units.indexOf(curUnit) < 0) index[curBuilding].units.push(curUnit);
+      }
     }
 
     for (var r = headerRow; r < matrix.length; r++) {
@@ -622,46 +636,38 @@
         curUnit = (uText === '/' || uText === '-') ? '' : uText.replace(/单元\s*$/, '').trim();
       }
 
-      var floor = null;
-      var roomNo = '';
-      var door = '';
-
-      if (cfg.mode === 'split') {
-        var f = cell(row, cfg.floorCol).replace(/[^\d]/g, '');
-        var n = cell(row, cfg.roomNoCol).replace(/[^\d]/g, '');
-        if (!f || !n) {
-          errors.push({ row: r + 1, reason: '楼层或房号为空' });
-          continue;
+      if (layout === 'grid') {
+        var fText = cell(row, cfg.floorCol).replace(/[^\d]/g, '');
+        var gridFloor = fText ? parseInt(fText, 10) : null;
+        var start = cfg.doorStartCol || (cfg.floorCol ? cfg.floorCol + 1 : 1);
+        var added = 0;
+        for (var c = start; c <= maxCols; c++) {
+          var rawDoor = cell(row, c);
+          if (!rawDoor || rawDoor === '/' || rawDoor === '-') continue;
+          var groups = rawDoor.match(/\d+/g);
+          var no = groups ? groups[groups.length - 1] : '';
+          if (!no) continue;
+          var floor = gridFloor;
+          if (floor == null && no.length > 2) floor = parseInt(no.slice(0, -2), 10);
+          pushRoom(r + 1, no, floor);
+          added++;
         }
-        floor = parseInt(f, 10);
-        roomNo = n.length === 1 ? '0' + n : n;
-        door = String(floor) + roomNo;
-      } else {
-        var raw = cell(row, cfg.roomCol);
-        if (!raw) {
-          errors.push({ row: r + 1, reason: '房间编号为空' });
-          continue;
-        }
-        var groups = raw.match(/\d+/g);
-        var no = groups ? groups[groups.length - 1] : '';
-        if (!no) {
-          errors.push({ row: r + 1, reason: '房间编号不含数字' });
-          continue;
-        }
-        floor = no.length > 2 ? parseInt(no.slice(0, -2), 10) : null;
-        roomNo = no.length >= 2 ? no.slice(-2) : '0' + no;
-        door = no;
+        continue;
       }
 
-      rooms.push({ building: curBuilding, unit: curUnit, floor: floor, door: door, row: r + 1 });
-      if (cfg.buildingCol) {
-        if (!index[curBuilding]) {
-          index[curBuilding] = { name: curBuilding, count: 0, units: [] };
-          buildings.push(index[curBuilding]);
-        }
-        index[curBuilding].count++;
-        if (index[curBuilding].units.indexOf(curUnit) < 0) index[curBuilding].units.push(curUnit);
+      var raw = cell(row, cfg.roomCol);
+      if (!raw) {
+        errors.push({ row: r + 1, reason: '房间编号为空' });
+        continue;
       }
+      var nums = raw.match(/\d+/g);
+      var roomNo = nums ? nums[nums.length - 1] : '';
+      if (!roomNo) {
+        errors.push({ row: r + 1, reason: '房间编号不含数字' });
+        continue;
+      }
+      var rowFloor = roomNo.length > 2 ? parseInt(roomNo.slice(0, -2), 10) : null;
+      pushRoom(r + 1, roomNo, rowFloor);
     }
 
     if (!cfg.buildingCol) {
@@ -670,7 +676,7 @@
 
     return {
       mode: cfg.buildingCol ? 'building' : 'single',
-      layout: 'row',
+      layout: layout,
       headerRow: headerRow,
       rooms: rooms,
       buildings: buildings,
@@ -680,31 +686,64 @@
 
   // 猜一个初始列映射，供结构确认界面预填
   function guessRoomConfig(matrix) {
-    var headerRow = 1;
-    var map = {};
+    var maxCols = matrix.reduce(function (n, row) { return Math.max(n, row.length); }, 0);
     for (var r = 0; r < Math.min(matrix.length, 10); r++) {
-      var row = (matrix[r] || []).map(function (v) { return String(v == null ? '' : v).trim(); });
-      var score = 0;
-      row.forEach(function (text, i) {
-        if (/^(楼栋|楼宇)/.test(text)) { map.building = i + 1; score++; }
-        else if (/^单元/.test(text)) { map.unit = i + 1; score++; }
-        else if (/楼层/.test(text)) { map.floor = i + 1; score++; }
-        else if (/^(房间编号|房间号|门牌)/.test(text)) { map.room = i + 1; score++; }
-        else if (/^房号/.test(text)) { map.roomNo = i + 1; score++; }
+      var texts = (matrix[r] || []).map(function (v) { return String(v == null ? '' : v).trim(); });
+      var idx = { building: 0, unit: 0, floor: 0, room: 0, roomNo: 0 };
+      var doors = [];
+      texts.forEach(function (text, i) {
+        if (/^(楼栋|楼宇)/.test(text)) idx.building = idx.building || i + 1;
+        else if (/^单元/.test(text)) idx.unit = idx.unit || i + 1;
+        else if (/楼层/.test(text)) idx.floor = idx.floor || i + 1;
+        else if (/^房号/.test(text)) idx.roomNo = idx.roomNo || i + 1;
+        else if (/^(房间编号|房间号|门牌)/.test(text)) {
+          idx.room = idx.room || i + 1;
+          doors.push(i + 1);
+        }
       });
-      if (score > 0) { headerRow = r + 1; break; }
-      map = {};
+
+      var hasAny = idx.building || idx.unit || idx.floor || idx.room || idx.roomNo;
+      if (!hasAny) continue;
+
+      // 横向门牌：有「楼层」，且门牌表头重复出现（合并单元格），
+      // 或者门牌列后面还有没表头的数据列。
+      var grid = false;
+      var doorStart = 0;
+      if (idx.floor && !idx.roomNo) {
+        if (doors.length >= 2) {
+          grid = true;
+          doorStart = doors[0];
+        } else if (doors.length === 1) {
+          var lastHeader = texts.reduce(function (last, t, i) { return t ? i + 1 : last; }, 0);
+          if (doors[0] < lastHeader || doors[0] < maxCols) {
+            grid = true;
+            doorStart = doors[0];
+          }
+        } else {
+          grid = true;
+          doorStart = idx.floor + 1;
+        }
+      }
+
+      return {
+        layout: grid ? 'grid' : 'row',
+        headerRow: r + 1,
+        buildingCol: idx.building || 0,
+        unitCol: idx.unit || 0,
+        roomCol: idx.room || (idx.floor || idx.roomNo ? 0 : 2),
+        floorCol: idx.floor || 0,
+        doorStartCol: grid ? doorStart : 0
+      };
     }
 
-    var mode = map.floor && map.roomNo && !map.room ? 'split' : 'room';
     return {
-      headerRow: headerRow,
-      buildingCol: map.building || 0,
-      unitCol: map.unit || 0,
-      mode: mode,
-      roomCol: map.room || (mode === 'room' ? 2 : 0),
-      floorCol: map.floor || 0,
-      roomNoCol: map.roomNo || 0
+      layout: 'row',
+      headerRow: 1,
+      buildingCol: 0,
+      unitCol: 0,
+      roomCol: 2,
+      floorCol: 0,
+      doorStartCol: 0
     };
   }
 

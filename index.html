@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -76,15 +76,15 @@
         <label class="field-inline"><span>表头在第几行</span><input type="number" id="structHeaderRow" class="num-sm" min="1" value="1"></label>
         <label class="field-inline"><span>楼栋在哪列</span><select id="structBuildingCol" class="select-sm"></select></label>
         <label class="field-inline"><span>单元列</span><select id="structUnitCol" class="select-sm"></select></label>
-        <label class="field-inline"><span>解析方式</span>
-          <select id="structMode" class="select-sm">
-            <option value="room">房间编号含楼层</option>
-            <option value="split">楼层/房号分列</option>
+        <label class="field-inline"><span>表格布局</span>
+          <select id="structLayout" class="select-sm">
+            <option value="row">一行一间</option>
+            <option value="grid">横向门牌（多列）</option>
           </select>
         </label>
-        <label class="field-inline struct-room"><span>房间号在哪列</span><select id="structRoomCol" class="select-sm"></select></label>
-        <label class="field-inline struct-split" hidden><span>楼层在哪列</span><select id="structFloorCol" class="select-sm"></select></label>
-        <label class="field-inline struct-split" hidden><span>房号在哪列</span><select id="structRoomNoCol" class="select-sm"></select></label>
+        <label class="field-inline struct-row"><span>房间号在哪列</span><select id="structRoomCol" class="select-sm"></select></label>
+        <label class="field-inline struct-grid" hidden><span>楼层在哪列</span><select id="structFloorCol" class="select-sm"></select></label>
+        <label class="field-inline struct-grid" hidden><span>门牌从哪列开始</span><select id="structDoorStartCol" class="select-sm"></select></label>
       </div>
       <div class="struct-stats" id="structStats"></div>
       <div class="table-scroll struct-preview">

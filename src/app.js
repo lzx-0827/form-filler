@@ -176,17 +176,6 @@
     return rows;
   }
 
-  function isGridLayout(matrix) {
-    for (var r = 0; r < Math.min(matrix.length, 10); r++) {
-      var row = matrix[r] || [];
-      var hasFloor = row.some(function (v) { return /楼层/.test(String(v == null ? '' : v)); });
-      if (!hasFloor) continue;
-      var hasRoomHeader = row.some(function (v) { return /房号|房间编号|房间号/.test(String(v == null ? '' : v)); });
-      return !hasRoomHeader;
-    }
-    return false;
-  }
-
   function structureMatrix() {
     var p = state.pending;
     return p ? p.sheets[p.sheetIndex].matrix : [];
@@ -206,20 +195,20 @@
 
   function readStructureConfig() {
     return {
+      layout: $('#structLayout').value,
       headerRow: parseInt($('#structHeaderRow').value, 10) || 1,
       buildingCol: parseInt($('#structBuildingCol').value, 10) || 0,
       unitCol: parseInt($('#structUnitCol').value, 10) || 0,
-      mode: $('#structMode').value,
       roomCol: parseInt($('#structRoomCol').value, 10) || 0,
       floorCol: parseInt($('#structFloorCol').value, 10) || 0,
-      roomNoCol: parseInt($('#structRoomNoCol').value, 10) || 0
+      doorStartCol: parseInt($('#structDoorStartCol').value, 10) || 0
     };
   }
 
-  function applyModeUI() {
-    var split = $('#structMode').value === 'split';
-    document.querySelectorAll('.struct-split').forEach(function (el) { el.hidden = !split; });
-    document.querySelectorAll('.struct-room').forEach(function (el) { el.hidden = split; });
+  function applyLayoutUI() {
+    var grid = $('#structLayout').value === 'grid';
+    document.querySelectorAll('.struct-grid').forEach(function (el) { el.hidden = !grid; });
+    document.querySelectorAll('.struct-row').forEach(function (el) { el.hidden = grid; });
   }
 
   function fillStructureColumns() {
@@ -232,13 +221,13 @@
     $('#structUnitCol').innerHTML = columnOptions(matrix, cfg.headerRow, cfg.unitCol);
     $('#structRoomCol').innerHTML = columnOptions(matrix, cfg.headerRow, cfg.roomCol);
     $('#structFloorCol').innerHTML = columnOptions(matrix, cfg.headerRow, cfg.floorCol);
-    $('#structRoomNoCol').innerHTML = columnOptions(matrix, cfg.headerRow, cfg.roomNoCol);
-    $('#structMode').value = cfg.mode;
+    $('#structDoorStartCol').innerHTML = columnOptions(matrix, cfg.headerRow, cfg.doorStartCol);
+    $('#structLayout').value = cfg.layout || 'row';
     $('#structSheet').innerHTML = p.sheets.map(function (s, i) {
       return '<option value="' + i + '"' + (i === p.sheetIndex ? ' selected' : '') + '>' + escapeHtml(s.name) + '</option>';
     }).join('');
     $('#structSheet').disabled = p.sheets.length < 2;
-    applyModeUI();
+    applyLayoutUI();
     renderStructurePreview();
   }
 
@@ -258,9 +247,8 @@
     var head = '<thead><tr><th>行</th><th>楼栋</th><th>单元</th><th>楼层</th><th>房号</th><th>原值</th><th>状态</th></tr></thead>';
     var rows = parsed.rooms.slice(0, 12).map(function (r) {
       var source = matrix[r.row - 1] || [];
-      var raw = cfg.mode === 'split'
-        ? String(source[cfg.floorCol - 1] == null ? '' : source[cfg.floorCol - 1]) + '/' +
-          String(source[cfg.roomNoCol - 1] == null ? '' : source[cfg.roomNoCol - 1])
+      var raw = cfg.layout === 'grid'
+        ? String(source[cfg.floorCol - 1] == null ? '' : source[cfg.floorCol - 1]) + ' 层'
         : source[cfg.roomCol - 1];
       return '<tr><td>' + r.row + '</td><td>' + escapeHtml(r.building) + '</td><td>' + escapeHtml(r.unit || '') +
         '</td><td>' + escapeHtml(r.floor == null ? '' : r.floor) + '</td><td>' + escapeHtml(FF.splitDoor(r.door, r.floor)) +
@@ -325,15 +313,6 @@
         state.page = 0;
         renderPreview();
         renderExportState();
-
-        if (isGridLayout(sheets[0].matrix)) {
-          var parsed = FF.parseRoomSheet(wb.worksheets[0]);
-          if (!parsed.rooms.length) throw new Error('没有读到房间');
-          state.pending = null;
-          $('#btnStructSettings').hidden = true;
-          applyRooms(parsed, file.name);
-          return;
-        }
 
         var config = FF.guessRoomConfig(sheets[0].matrix);
         state.pending = {
@@ -1002,12 +981,12 @@
       fillStructureColumns();
     });
 
-    $('#structMode').addEventListener('change', function () {
-      applyModeUI();
+    $('#structLayout').addEventListener('change', function () {
+      applyLayoutUI();
       renderStructurePreview();
     });
 
-    ['#structBuildingCol', '#structUnitCol', '#structRoomCol', '#structFloorCol', '#structRoomNoCol']
+    ['#structBuildingCol', '#structUnitCol', '#structRoomCol', '#structFloorCol', '#structDoorStartCol']
       .forEach(function (selector) {
         $(selector).addEventListener('change', renderStructurePreview);
       });
