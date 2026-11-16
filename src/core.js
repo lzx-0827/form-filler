@@ -741,8 +741,10 @@
     }
     if (!headerRow) {
       for (var r2 = 0; r2 < Math.min(matrix.length, 10); r2++) {
-        var filled = (matrix[r2] || []).filter(function (v) { return String(v == null ? '' : v).trim() !== ''; }).length;
-        if (filled >= 2) { headerRow = r2 + 1; break; }
+        var filled = (matrix[r2] || []).map(function (v) { return String(v == null ? '' : v).trim(); })
+          .filter(function (v) { return v !== ''; });
+        var distinct = filled.filter(function (v, i) { return filled.indexOf(v) === i; }).length;
+        if (distinct >= 2) { headerRow = r2 + 1; break; }
       }
     }
     if (!headerRow) headerRow = 1;
