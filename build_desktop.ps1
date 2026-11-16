@@ -2,6 +2,8 @@
 # 需要：pip install pyinstaller pywebview
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
+Get-Process -Name "表计安装点填表器" -ErrorAction SilentlyContinue | Stop-Process -Force
+Start-Sleep -Seconds 1
 
 python -m PyInstaller --noconfirm --clean --onedir --noconsole `
   --name "表计安装点填表器" `
@@ -25,5 +27,6 @@ Copy-Item "使用说明.txt" "dist\表计安装点填表器\使用说明.txt" -F
 if (Test-Path "dist\表计安装点填表器.zip") { Remove-Item "dist\表计安装点填表器.zip" }
 Compress-Archive -Path "dist\表计安装点填表器" -DestinationPath "dist\表计安装点填表器.zip" -CompressionLevel Optimal
 Write-Host "完成：dist\表计安装点填表器.zip"
+
 
 
