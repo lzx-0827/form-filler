@@ -1,4 +1,4 @@
-:root {
+﻿:root {
   --paper: #f5f3ee;
   --card: #ffffff;
   --ink: #1d1f21;
@@ -836,3 +836,31 @@ input[type="search"]::-webkit-search-decoration { -webkit-appearance: none; appe
 
 
 
+
+.busy {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  background: rgba(29, 31, 33, .28);
+}
+.busy-box {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 22px;
+  border-radius: 12px;
+  background: #fff;
+  font-size: 13.5px;
+  box-shadow: 0 12px 40px -12px rgba(0, 0, 0, .4);
+}
+.spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid #cfe8e2;
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin .8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }

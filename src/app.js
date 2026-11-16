@@ -1,4 +1,4 @@
-/*
+﻿/*
  * 表计安装点填表器 · 界面逻辑
  * 数据只在内存：无 localStorage、无网络请求。
  */
@@ -18,6 +18,7 @@
     buildings: [],
     mapping: {},
     pending: null,
+    exporting: false,
     overrides: {},
     suffixes: { unitSuffix: '', floorSuffix: '', roomSuffix: '' },
     suffixOverrides: {},
@@ -852,9 +853,13 @@
   }
 
   function download() {
+    if (state.exporting) return;
+    state.exporting = true;
     var btn = $('#btnExport');
+    var busy = $('#busy');
     btn.disabled = true;
     btn.textContent = '生成中…';
+    busy.hidden = false;
 
     exportWorkbook().then(function (result) {
       toast('已保存：' + result.savedPath);
@@ -863,6 +868,8 @@
       console.error(err);
       toast('导出失败：' + err.message, true);
     }).then(function () {
+      state.exporting = false;
+      busy.hidden = true;
       renderExportState();
     });
   }
@@ -1142,6 +1149,7 @@
     init();
   }
 })();
+
 
 
 
