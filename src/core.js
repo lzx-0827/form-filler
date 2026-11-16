@@ -1,4 +1,4 @@
-/*
+﻿/*
  * 填表器 · 核心逻辑（与界面无关，可在浏览器和 Node 中运行）
  * 只做四件事：解析数据表、检测模板占位符、从文字里抽取字段、把值写回模板。
  */
@@ -586,6 +586,128 @@
     };
   }
 
+  // 按用户确认的列映射解析：一行一间
+  // cfg: {headerRow, buildingCol, unitCol, roomCol, mode:'room'|'split', floorCol, roomNoCol}
+  function parseRoomMatrix(matrix, cfg) {
+    var headerRow = Math.max(1, cfg.headerRow || 1);
+    var rooms = [];
+    var buildings = [];
+    var index = {};
+    var errors = [];
+    var curBuilding = cfg.buildingCol ? '' : '-';
+    var curUnit = '';
+
+    function cell(row, col) {
+      if (!col) return '';
+      var v = row[col - 1];
+      return v == null ? '' : String(v).trim();
+    }
+
+    for (var r = headerRow; r < matrix.length; r++) {
+      var row = matrix[r] || [];
+      var hasContent = row.some(function (v) { return String(v == null ? '' : v).trim() !== ''; });
+      if (!hasContent) continue;
+
+      if (cfg.buildingCol) {
+        var bText = cell(row, cfg.buildingCol);
+        if (bText) { curBuilding = bText; curUnit = ''; }
+        if (!curBuilding) {
+          errors.push({ row: r + 1, reason: '缺少楼栋' });
+          continue;
+        }
+      }
+
+      var uText = cell(row, cfg.unitCol);
+      if (uText) {
+        curUnit = (uText === '/' || uText === '-') ? '' : uText.replace(/单元\s*$/, '').trim();
+      }
+
+      var floor = null;
+      var roomNo = '';
+      var door = '';
+
+      if (cfg.mode === 'split') {
+        var f = cell(row, cfg.floorCol).replace(/[^\d]/g, '');
+        var n = cell(row, cfg.roomNoCol).replace(/[^\d]/g, '');
+        if (!f || !n) {
+          errors.push({ row: r + 1, reason: '楼层或房号为空' });
+          continue;
+        }
+        floor = parseInt(f, 10);
+        roomNo = n.length === 1 ? '0' + n : n;
+        door = String(floor) + roomNo;
+      } else {
+        var raw = cell(row, cfg.roomCol);
+        if (!raw) {
+          errors.push({ row: r + 1, reason: '房间编号为空' });
+          continue;
+        }
+        var groups = raw.match(/\d+/g);
+        var no = groups ? groups[groups.length - 1] : '';
+        if (!no) {
+          errors.push({ row: r + 1, reason: '房间编号不含数字' });
+          continue;
+        }
+        floor = no.length > 2 ? parseInt(no.slice(0, -2), 10) : null;
+        roomNo = no.length >= 2 ? no.slice(-2) : '0' + no;
+        door = no;
+      }
+
+      rooms.push({ building: curBuilding, unit: curUnit, floor: floor, door: door, row: r + 1 });
+      if (cfg.buildingCol) {
+        if (!index[curBuilding]) {
+          index[curBuilding] = { name: curBuilding, count: 0, units: [] };
+          buildings.push(index[curBuilding]);
+        }
+        index[curBuilding].count++;
+        if (index[curBuilding].units.indexOf(curUnit) < 0) index[curBuilding].units.push(curUnit);
+      }
+    }
+
+    if (!cfg.buildingCol) {
+      buildings = [{ name: '-', count: rooms.length, units: [] }];
+    }
+
+    return {
+      mode: cfg.buildingCol ? 'building' : 'single',
+      layout: 'row',
+      headerRow: headerRow,
+      rooms: rooms,
+      buildings: buildings,
+      errors: errors
+    };
+  }
+
+  // 猜一个初始列映射，供结构确认界面预填
+  function guessRoomConfig(matrix) {
+    var headerRow = 1;
+    var map = {};
+    for (var r = 0; r < Math.min(matrix.length, 10); r++) {
+      var row = (matrix[r] || []).map(function (v) { return String(v == null ? '' : v).trim(); });
+      var score = 0;
+      row.forEach(function (text, i) {
+        if (/^(楼栋|楼宇)/.test(text)) { map.building = i + 1; score++; }
+        else if (/^单元/.test(text)) { map.unit = i + 1; score++; }
+        else if (/楼层/.test(text)) { map.floor = i + 1; score++; }
+        else if (/^(房间编号|房间号|门牌)/.test(text)) { map.room = i + 1; score++; }
+        else if (/^房号/.test(text)) { map.roomNo = i + 1; score++; }
+      });
+      if (score > 0) { headerRow = r + 1; break; }
+      map = {};
+    }
+
+    var mode = map.floor && map.roomNo && !map.room ? 'split' : 'room';
+    return {
+      headerRow: headerRow,
+      buildingCol: map.building || 0,
+      unitCol: map.unit || 0,
+      mode: mode,
+      roomCol: map.room || (mode === 'room' ? 2 : 0),
+      floorCol: map.floor || 0,
+      roomNoCol: map.roomNo || 0
+    };
+  }
+
   // 解析《房间编号》：兼容两种排版
   // 1) 楼栋/单元/楼层 + 横向门牌；2) 楼栋 + 房间编号（每行一间）
   function parseRoomSheet(ws) {
@@ -804,6 +926,8 @@
     buildRowValues: buildRowValues,
     templateFromRows: templateFromRows,
     parseRoomSheet: parseRoomSheet,
+    parseRoomMatrix: parseRoomMatrix,
+    guessRoomConfig: guessRoomConfig,
     splitDoor: splitDoor,
     composeAddress: composeAddress,
     suggestMapping: suggestMapping,
@@ -814,4 +938,5 @@
   if (typeof module === 'object' && module.exports) module.exports = api;
   root.FormFiller = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
+
 

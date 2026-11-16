@@ -17,6 +17,7 @@
     rooms: [],
     buildings: [],
     mapping: {},
+    pending: null,
     overrides: {},
     suffixes: { unitSuffix: '', floorSuffix: '', roomSuffix: '' },
     suffixOverrides: {},
@@ -161,6 +162,148 @@
 
   /* ---------------- 读取房间清单 ---------------- */
 
+  function sheetMatrix(ws) {
+    var rows = [];
+    var rowCount = ws.rowCount || 0;
+    var colCount = ws.columnCount || 0;
+    for (var r = 1; r <= rowCount; r++) {
+      var row = ws.getRow(r);
+      var arr = [];
+      for (var c = 1; c <= colCount; c++) arr.push(FF.cellText(row.getCell(c)));
+      rows.push(arr);
+    }
+    return rows;
+  }
+
+  function isGridLayout(matrix) {
+    for (var r = 0; r < Math.min(matrix.length, 10); r++) {
+      var row = matrix[r] || [];
+      var hasFloor = row.some(function (v) { return /楼层/.test(String(v == null ? '' : v)); });
+      if (!hasFloor) continue;
+      var hasRoomHeader = row.some(function (v) { return /房号|房间编号|房间号/.test(String(v == null ? '' : v)); });
+      return !hasRoomHeader;
+    }
+    return false;
+  }
+
+  function structureMatrix() {
+    var p = state.pending;
+    return p ? p.sheets[p.sheetIndex].matrix : [];
+  }
+
+  function columnOptions(matrix, headerRow, selected) {
+    var header = matrix[headerRow - 1] || [];
+    var maxCols = matrix.reduce(function (n, row) { return Math.max(n, row.length); }, 0);
+    var html = '<option value="0">无</option>';
+    for (var c = 1; c <= maxCols; c++) {
+      var text = String(header[c - 1] == null ? '' : header[c - 1]).trim();
+      html += '<option value="' + c + '"' + (c === selected ? ' selected' : '') + '>' +
+        FF.numberToCol(c) + (text ? '（' + escapeHtml(text) + '）' : '') + '</option>';
+    }
+    return html;
+  }
+
+  function readStructureConfig() {
+    return {
+      headerRow: parseInt($('#structHeaderRow').value, 10) || 1,
+      buildingCol: parseInt($('#structBuildingCol').value, 10) || 0,
+      unitCol: parseInt($('#structUnitCol').value, 10) || 0,
+      mode: $('#structMode').value,
+      roomCol: parseInt($('#structRoomCol').value, 10) || 0,
+      floorCol: parseInt($('#structFloorCol').value, 10) || 0,
+      roomNoCol: parseInt($('#structRoomNoCol').value, 10) || 0
+    };
+  }
+
+  function applyModeUI() {
+    var split = $('#structMode').value === 'split';
+    document.querySelectorAll('.struct-split').forEach(function (el) { el.hidden = !split; });
+    document.querySelectorAll('.struct-room').forEach(function (el) { el.hidden = split; });
+  }
+
+  function fillStructureColumns() {
+    var p = state.pending;
+    if (!p) return;
+    var matrix = structureMatrix();
+    var cfg = p.config;
+    $('#structHeaderRow').value = cfg.headerRow;
+    $('#structBuildingCol').innerHTML = columnOptions(matrix, cfg.headerRow, cfg.buildingCol);
+    $('#structUnitCol').innerHTML = columnOptions(matrix, cfg.headerRow, cfg.unitCol);
+    $('#structRoomCol').innerHTML = columnOptions(matrix, cfg.headerRow, cfg.roomCol);
+    $('#structFloorCol').innerHTML = columnOptions(matrix, cfg.headerRow, cfg.floorCol);
+    $('#structRoomNoCol').innerHTML = columnOptions(matrix, cfg.headerRow, cfg.roomNoCol);
+    $('#structMode').value = cfg.mode;
+    $('#structSheet').innerHTML = p.sheets.map(function (s, i) {
+      return '<option value="' + i + '"' + (i === p.sheetIndex ? ' selected' : '') + '>' + escapeHtml(s.name) + '</option>';
+    }).join('');
+    $('#structSheet').disabled = p.sheets.length < 2;
+    applyModeUI();
+    renderStructurePreview();
+  }
+
+  function renderStructurePreview() {
+    var p = state.pending;
+    if (!p) return;
+    var cfg = readStructureConfig();
+    p.config = cfg;
+    var matrix = structureMatrix();
+    var parsed = FF.parseRoomMatrix(matrix, cfg);
+    var errors = parsed.errors || [];
+
+    $('#structStats').textContent =
+      '可解析 ' + parsed.rooms.length + ' 间 · 异常 ' + errors.length + ' 行 · ' + parsed.buildings.length + ' 个楼栋' +
+      (errors.length ? '（' + errors.slice(0, 3).map(function (e) { return '第' + e.row + '行 ' + e.reason; }).join('；') + '）' : '');
+
+    var head = '<thead><tr><th>行</th><th>楼栋</th><th>单元</th><th>楼层</th><th>房号</th><th>原值</th><th>状态</th></tr></thead>';
+    var rows = parsed.rooms.slice(0, 12).map(function (r) {
+      var source = matrix[r.row - 1] || [];
+      var raw = cfg.mode === 'split'
+        ? String(source[cfg.floorCol - 1] == null ? '' : source[cfg.floorCol - 1]) + '/' +
+          String(source[cfg.roomNoCol - 1] == null ? '' : source[cfg.roomNoCol - 1])
+        : source[cfg.roomCol - 1];
+      return '<tr><td>' + r.row + '</td><td>' + escapeHtml(r.building) + '</td><td>' + escapeHtml(r.unit || '') +
+        '</td><td>' + escapeHtml(r.floor == null ? '' : r.floor) + '</td><td>' + escapeHtml(FF.splitDoor(r.door, r.floor)) +
+        '</td><td>' + escapeHtml(raw == null ? '' : raw) + '</td>' +
+        '<td><span class="status ok"><i></i>正常</span></td></tr>';
+    }).join('');
+    var errRows = errors.slice(0, 5).map(function (e) {
+      return '<tr class="bad"><td>' + e.row + '</td><td colspan="5"></td>' +
+        '<td><span class="status bad"><i></i>' + escapeHtml(e.reason) + '</span></td></tr>';
+    }).join('');
+    $('#structPreview').innerHTML = head + '<tbody>' + rows + errRows + '</tbody>';
+  }
+
+  function renderStructure() {
+    $('#structPanel').hidden = false;
+    $('#dropRooms').hidden = true;
+    fillStructureColumns();
+  }
+
+  function hideStructure() {
+    $('#structPanel').hidden = true;
+    state.pending = null;
+  }
+
+  function applyRooms(parsed, fileName) {
+    state.fileName = fileName;
+    state.rooms = parsed.rooms;
+    state.buildings = parsed.buildings;
+    state.mode = parsed.mode;
+    state.overrides = {};
+    state.page = 0;
+    state.filterBuilding = '';
+    state.filterFloor = '';
+    state.query = '';
+    $('#searchInput').value = '';
+    $('#btnClearSearch').hidden = true;
+    hideStructure();
+    $('#card-mapping').hidden = parsed.mode === 'single';
+    if (parsed.mode === 'building' && state.template) autoMap(false);
+    renderAll();
+    markLoaded('rooms');
+    if (!$('#prefixInput').value.trim()) $('#prefixInput').focus();
+  }
+
   function loadRooms(file) {
     if (!file) return;
     if (!/\.xlsx$/i.test(file.name)) {
@@ -170,25 +313,28 @@
     file.arrayBuffer().then(function (buffer) {
       var wb = new ExcelJS.Workbook();
       return wb.xlsx.load(buffer).then(function () {
-        var ws = wb.worksheets[0];
-        if (!ws) throw new Error('工作簿里没有工作表');
-        var parsed = FF.parseRoomSheet(ws);
-        if (!parsed.rooms.length) throw new Error('没有读到房间，请检查表头是否包含「楼层」');
-        state.fileName = file.name;
-        state.rooms = parsed.rooms;
-        state.buildings = parsed.buildings;
-        state.mode = parsed.mode;
-        state.overrides = {};
-        state.page = 0;
-        state.filterBuilding = '';
-        state.filterFloor = '';
-        state.query = '';
-        $('#searchInput').value = '';
-        $('#card-mapping').hidden = state.mode === 'single';
-        if (state.mode === 'building' && state.template) autoMap(false);
-        renderAll();
-        markLoaded('rooms');
-        if (!$('#prefixInput').value.trim()) $('#prefixInput').focus();
+        if (!wb.worksheets.length) throw new Error('工作簿里没有工作表');
+        var sheets = wb.worksheets.map(function (ws) {
+          return { name: ws.name, matrix: sheetMatrix(ws) };
+        });
+
+        if (isGridLayout(sheets[0].matrix)) {
+          var parsed = FF.parseRoomSheet(wb.worksheets[0]);
+          if (!parsed.rooms.length) throw new Error('没有读到房间');
+          applyRooms(parsed, file.name);
+          return;
+        }
+
+        state.pending = {
+          fileName: file.name,
+          sheets: sheets,
+          sheetIndex: 0,
+          config: FF.guessRoomConfig(sheets[0].matrix)
+        };
+        $('#roomMeta').hidden = true;
+        $('#roomPill').hidden = true;
+        $('#card-mapping').hidden = true;
+        renderStructure();
       });
     }).catch(function (err) {
       console.error(err);
@@ -809,6 +955,48 @@
       });
     });
 
+    $('#structSheet').addEventListener('change', function (e) {
+      if (!state.pending) return;
+      state.pending.sheetIndex = parseInt(e.target.value, 10) || 0;
+      state.pending.config = FF.guessRoomConfig(structureMatrix());
+      fillStructureColumns();
+    });
+
+    $('#structHeaderRow').addEventListener('change', function () {
+      if (!state.pending) return;
+      state.pending.config.headerRow = parseInt($('#structHeaderRow').value, 10) || 1;
+      fillStructureColumns();
+    });
+
+    $('#structMode').addEventListener('change', function () {
+      applyModeUI();
+      renderStructurePreview();
+    });
+
+    ['#structBuildingCol', '#structUnitCol', '#structRoomCol', '#structFloorCol', '#structRoomNoCol']
+      .forEach(function (selector) {
+        $(selector).addEventListener('change', renderStructurePreview);
+      });
+
+    $('#btnConfirmStructure').addEventListener('click', function () {
+      if (!state.pending) return;
+      var parsed = FF.parseRoomMatrix(structureMatrix(), readStructureConfig());
+      if (!parsed.rooms.length) {
+        toast('没有解析出房间，请检查列选择', true);
+        return;
+      }
+      var name = state.pending.fileName;
+      applyRooms(parsed, name);
+      toast('已解析 ' + parsed.rooms.length + ' 间' +
+        (parsed.errors.length ? '，跳过 ' + parsed.errors.length + ' 行' : ''));
+    });
+
+    $('#btnCancelStructure').addEventListener('click', function () {
+      hideStructure();
+      $('#dropRooms').hidden = false;
+      $('#fileRooms').value = '';
+    });
+
     $('#prefixInput').addEventListener('input', function () {
       renderPreview();
       renderExportState();
@@ -954,6 +1142,7 @@
     init();
   }
 })();
+
 
 
 
