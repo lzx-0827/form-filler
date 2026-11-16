@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -55,6 +55,7 @@
       <h2>房间清单</h2>
       <span class="spacer"></span>
       <button class="ghost btn-sm" id="btnRoomTemplate" type="button">下载房间模板</button>
+      <button class="ghost btn-sm" id="btnStructSettings" type="button" hidden>解析设置</button>
       <span class="pill" id="roomPill" hidden></span>
       <button class="ghost btn-sm" id="btnReplaceRooms" type="button" hidden>更换</button>
     </div>
@@ -69,10 +70,11 @@
     <div class="meta-line" id="roomMeta" hidden></div>
 
     <div class="struct-panel" id="structPanel" hidden>
+      <p class="hint struct-hint">核对表头行和列，预览没问题后点「确认结构」。</p>
       <div class="struct-fields">
         <label class="field-inline"><span>工作表</span><select id="structSheet" class="select-sm"></select></label>
-        <label class="field-inline"><span>表头行</span><input type="number" id="structHeaderRow" class="num-sm" min="1" value="1"></label>
-        <label class="field-inline"><span>楼栋列</span><select id="structBuildingCol" class="select-sm"></select></label>
+        <label class="field-inline"><span>表头在第几行</span><input type="number" id="structHeaderRow" class="num-sm" min="1" value="1"></label>
+        <label class="field-inline"><span>楼栋在哪列</span><select id="structBuildingCol" class="select-sm"></select></label>
         <label class="field-inline"><span>单元列</span><select id="structUnitCol" class="select-sm"></select></label>
         <label class="field-inline"><span>解析方式</span>
           <select id="structMode" class="select-sm">
@@ -80,9 +82,9 @@
             <option value="split">楼层/房号分列</option>
           </select>
         </label>
-        <label class="field-inline struct-room"><span>房间号列</span><select id="structRoomCol" class="select-sm"></select></label>
-        <label class="field-inline struct-split" hidden><span>楼层列</span><select id="structFloorCol" class="select-sm"></select></label>
-        <label class="field-inline struct-split" hidden><span>房号列</span><select id="structRoomNoCol" class="select-sm"></select></label>
+        <label class="field-inline struct-room"><span>房间号在哪列</span><select id="structRoomCol" class="select-sm"></select></label>
+        <label class="field-inline struct-split" hidden><span>楼层在哪列</span><select id="structFloorCol" class="select-sm"></select></label>
+        <label class="field-inline struct-split" hidden><span>房号在哪列</span><select id="structRoomNoCol" class="select-sm"></select></label>
       </div>
       <div class="struct-stats" id="structStats"></div>
       <div class="table-scroll struct-preview">
@@ -200,6 +202,7 @@
 <script src="src/app.js"></script>
 </body>
 </html>
+
 
 
 

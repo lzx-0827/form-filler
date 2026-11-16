@@ -1,4 +1,4 @@
-﻿/*
+/*
  * 表计安装点填表器 · 界面逻辑
  * 数据只在内存：无 localStorage、无网络请求。
  */
@@ -282,7 +282,6 @@
 
   function hideStructure() {
     $('#structPanel').hidden = true;
-    state.pending = null;
   }
 
   function applyRooms(parsed, fileName) {
@@ -319,23 +318,46 @@
           return { name: ws.name, matrix: sheetMatrix(ws) };
         });
 
+        state.rooms = [];
+        state.buildings = [];
+        state.mapping = {};
+        state.overrides = {};
+        state.page = 0;
+        renderPreview();
+        renderExportState();
+
         if (isGridLayout(sheets[0].matrix)) {
           var parsed = FF.parseRoomSheet(wb.worksheets[0]);
           if (!parsed.rooms.length) throw new Error('没有读到房间');
+          state.pending = null;
+          $('#btnStructSettings').hidden = true;
           applyRooms(parsed, file.name);
           return;
         }
 
+        var config = FF.guessRoomConfig(sheets[0].matrix);
         state.pending = {
           fileName: file.name,
           sheets: sheets,
           sheetIndex: 0,
-          config: FF.guessRoomConfig(sheets[0].matrix)
+          config: config
         };
+        $('#btnStructSettings').hidden = false;
+
+        var auto = FF.parseRoomMatrix(sheets[0].matrix, config);
+        if (auto.rooms.length) {
+          applyRooms(auto, file.name);
+          if (auto.errors.length) {
+            toast('已解析 ' + auto.rooms.length + ' 间，跳过 ' + auto.errors.length + ' 行；不对可点「解析设置」');
+          }
+          return;
+        }
+
         $('#roomMeta').hidden = true;
         $('#roomPill').hidden = true;
         $('#card-mapping').hidden = true;
         renderStructure();
+        toast('没认出这张表的格式，请在下方指定列', true);
       });
     }).catch(function (err) {
       console.error(err);
@@ -962,6 +984,11 @@
       });
     });
 
+    $('#btnStructSettings').addEventListener('click', function () {
+      if (!state.pending) { toast('这张表是自动识别的'); return; }
+      renderStructure();
+    });
+
     $('#structSheet').addEventListener('change', function (e) {
       if (!state.pending) return;
       state.pending.sheetIndex = parseInt(e.target.value, 10) || 0;
@@ -1149,6 +1176,7 @@
     init();
   }
 })();
+
 
 
 
